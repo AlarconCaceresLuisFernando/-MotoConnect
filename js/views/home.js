@@ -24,7 +24,7 @@ const VALUE_PROPOSITIONS = [
   {
     icon: 'compass',
     title: 'Asesoría Técnica Especializada',
-    copy: 'Recomendador guiado de 3 preguntas, comparador técnico lado a lado y asistente técnico conectado al inventario real para ayudarte a elegir sin conjeturas.',
+    copy: 'Asesor guiado de 4 preguntas, comparador técnico lado a lado y soporte técnico conectado al inventario real para ayudarte a elegir sin conjeturas.',
   },
 ];
 
@@ -33,7 +33,7 @@ const PURCHASE_STEPS = [
     step: '01',
     icon: 'search',
     title: 'Elige o déjate asesorar',
-    copy: 'Explora el catálogo por tipo de uso o responde 3 preguntas en el asesor para descubrir las opciones compatibles con tu ruta y experiencia.',
+    copy: 'Explora el catálogo por tipo de uso o responde 4 preguntas en el asesor para descubrir las opciones compatibles con tu ruta y experiencia.',
   },
   {
     step: '02',
@@ -220,7 +220,7 @@ export async function home(root) {
           <div>
             <span class="section-label">Comienza ahora</span>
             <h2>Encuentra la motocicleta adecuada para tu camino</h2>
-            <p>Consulta el catálogo completo con disponibilidad actualizada en vivo o utiliza el asesor guiado de 3 preguntas.</p>
+            <p>Consulta el catálogo completo con disponibilidad actualizada en vivo o utiliza el asesor guiado de 4 preguntas.</p>
           </div>
           <div class="home-cta-actions">
             <a href="#/catalogo" class="btn btn-primary btn-lg">Ir al Catálogo</a>

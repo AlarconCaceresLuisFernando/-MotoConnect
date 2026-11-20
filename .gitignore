@@ -1,14 +1,23 @@
 # Environment variables
 .env
+.env.*
+!.env.example
 
-# SQLite database
+# SQLite database & backups
 database/*.sqlite
 database/*.sqlite-*
 database/*.sqlite-wal
 database/*.sqlite-shm
+database/backups/
 
 # Dependencies
 node_modules/
 
-# Uploads
+# Uploads & private files
 uploads/
+private_uploads/
+images/productos/uploads/
+
+# Tooling / browser test artifacts
+.playwright-cli/
+.aistudio/
