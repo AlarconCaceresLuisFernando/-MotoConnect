@@ -1,0 +1,14 @@
+# Environment variables
+.env
+
+# SQLite database
+database/*.sqlite
+database/*.sqlite-*
+database/*.sqlite-wal
+database/*.sqlite-shm
+
+# Dependencies
+node_modules/
+
+# Uploads
+uploads/

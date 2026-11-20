@@ -31,7 +31,8 @@
       </button>
 
       <ul class="nav-links" id="nav-links">
-        <li><a href="#/catalogo" class="nav-link" data-route="catalogo">Catálogo</a></li>
+        <li><a href="#/" class="nav-link" data-route="catalogo">Catálogo</a></li>
+        <li><a href="#/" class="nav-link" data-route="recomendador" id="nav-recomendador-link">Asesor por Preguntas</a></li>
         <li><a href="#/comparador" class="nav-link" data-route="comparador">
           Comparador <span class="comparador-badge" id="comparador-badge" style="display:none">0</span>
         </a></li>
@@ -65,16 +66,16 @@
       <div class="footer-brand">
         <a href="#/" class="nav-logo footer-logo">MOTO<span>CONNECT</span></a>
         <p class="footer-tagline">La Experiencia de Conducción Definitiva</p>
-        <p class="footer-copy">© 2026 MotoConnect S.R.L. Todos los derechos reservados.</p>
+        <p class="footer-copy">© 2026 MotoConnect S.R.L.</p>
       </div>
 
       <div class="footer-links">
         <h4>Legal &amp; Soporte</h4>
         <ul>
-          <li><button class="footer-link-btn" onclick="openInfoModal('garantia')">Garantía Oficial</button></li>
-          <li><button class="footer-link-btn" onclick="openInfoModal('terminos')">Términos y Condiciones</button></li>
-          <li><button class="footer-link-btn" onclick="openInfoModal('entregas')">Política de Entregas</button></li>
-          <li><button class="footer-link-btn" onclick="openInfoModal('soporte')">Soporte al Cliente</button></li>
+          <li><button class="footer-link-btn">Garantía Oficial</button></li>
+          <li><button class="footer-link-btn">Términos de Compra</button></li>
+          <li><button class="footer-link-btn">Política de Entregas</button></li>
+          <li><button class="footer-link-btn">Soporte al Cliente</button></li>
         </ul>
       </div>
 
@@ -116,9 +117,9 @@
   </div>
 
   <!-- PayPal SDK -->
-  <script src="https://www.paypal.com/sdk/js?client-id=test&currency=USD"></script>
+  <script src="https://www.paypal.com/sdk/js?client-id=test&currency=USD&intent=capture&disable-funding=card"></script>
 
   <!-- App JS -->
-  <script src="app.js"></script>
+  <script type="module" src="/js/main.js"></script>
 </body>
 </html>
