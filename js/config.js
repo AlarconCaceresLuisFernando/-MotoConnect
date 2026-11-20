@@ -5,6 +5,18 @@
 
 export const API = '/api';
 export const BS_RATE = 6.96;
+export const WHATSAPP_NUMBER_DIGITS = '59167671435';
+export const WHATSAPP_NUMBER_DISPLAY = '+591 67671435';
+export const PRODUCT_CATEGORIES = [
+  'Trabajo',
+  'Urbana',
+  'Naked',
+  'Adventure',
+  'Supersport',
+  'Sport Touring',
+  'Equipamiento',
+  'Accesorio',
+];
 
 export const ROL_LABELS = {
  CLIENTE: 'Cliente',
@@ -77,8 +89,9 @@ export const LOGISTIC_LABELS = {
 
 export const METHOD_LABELS = {
  PAYPAL: 'PayPal',
- QR_BANCARIO: 'QR Bancario',
- DEPOSITO_BANCARIO: 'Depósito Bancario',
+ TARJETA: 'Tarjeta (Visa / Mastercard)',
+ QR_BANCARIO: 'Pago con QR',
+ DEPOSITO_BANCARIO: 'Depósito Bancario (Histórico)',
 };
 
 export const CITY_LIST = [

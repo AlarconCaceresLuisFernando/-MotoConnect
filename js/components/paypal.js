@@ -1,107 +1,231 @@
 /* ============================================================
- MotoConnect — components/paypal.js
- Integración aislada de PayPal Smart Buttons
- ============================================================ */
+   MotoConnect — components/paypal.js
+   Integración PayPal REST API v2 (PayPal + Tarjeta Débito/Crédito)
+   ============================================================ */
 
 import { api } from '../api.js';
-import { BS_RATE } from '../config.js';
 import { state, clearCart } from '../state.js';
-import { toast } from '../utils.js';
+import { esc, fmt, fmtBs, toast, icon } from '../utils.js';
 
-/**
- * Monta los botones de PayPal.
- * @param {number} total total a cobrar en USD
- * @param {() => object} getBuyer devuelve los datos del comprador
- * @param {string} reference código de referencia local
- */
-export function mountPayPal(total, getBuyer, reference) {
- const container = document.querySelector('#paypal-button-container');
- if (!container) return;
+let loadedClientId = null;
+let sdkPromise = null;
+let sdkPromiseClientId = null;
 
- if (!window.paypal) {
- container.innerHTML = '<div class="alert alert-warning"> PayPal no está disponible en este momento. Usa QR o depósito bancario.</div>';
- return;
- }
+function loadPayPalSdk(clientId) {
+  if (window.paypal && loadedClientId === clientId) {
+    return Promise.resolve(window.paypal);
+  }
+  if (sdkPromise && sdkPromiseClientId === clientId) {
+    return sdkPromise;
+  }
+  sdkPromiseClientId = clientId;
+  sdkPromise = new Promise((resolve, reject) => {
+    const existing = document.querySelector('script[data-paypal-sdk]');
+    if (existing) existing.remove();
 
- const totalUsd = (Number(total) / BS_RATE).toFixed(2);
- const subtotalUsd = (Number(totalUsd) / 1.05);
+    const script = document.createElement('script');
+    script.src = `https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(clientId)}&currency=USD&intent=capture&enable-funding=card&locale=es_ES`;
+    script.dataset.paypalSdk = 'true';
+    script.async = true;
+    script.onload = () => {
+      loadedClientId = clientId;
+      if (window.paypal) resolve(window.paypal);
+      else {
+        sdkPromise = null;
+        reject(new Error('No se pudo inicializar el SDK de PayPal.'));
+      }
+    };
+    script.onerror = () => {
+      sdkPromise = null;
+      reject(new Error('No se pudo cargar PayPal desde paypal.com.'));
+    };
+    document.head.appendChild(script);
+  });
+  return sdkPromise;
+}
 
- const requiredFields = [
- ['nombre', 'Nombre completo'],
- ['email', 'Email'],
- ['telefono', 'Teléfono'],
- ['ci', 'CI / NIT'],
- ['ciudad', 'Ciudad'],
- ['direccion', 'Dirección'],
- ];
+function unconfiguredNotice(paypalConfig, isCard, onSwitchToQr) {
+  const modeLabel = paypalConfig?.mode === 'live' ? 'Producción (Live)' : 'Pruebas (Sandbox)';
+  const title = isCard
+    ? 'Pago con tarjeta (Visa / Mastercard)'
+    : 'Pasarela PayPal en línea';
 
- container.innerHTML = '';
- window.paypal.Buttons({
- style: { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal', height: 44 },
+  const detail = paypalConfig?.hasSecret && !paypalConfig?.hasClientId
+    ? `La clave secreta de PayPal en modo <strong>${esc(modeLabel)}</strong> ya está registrada en el servidor. Solo falta agregar <code class="mono">PAYPAL_CLIENT_ID</code> en <code class="mono">.env</code> para habilitar el cobro real con ${isCard ? 'tarjeta de débito/crédito' : 'PayPal'}.`
+    : `Configura <code class="mono">PAYPAL_CLIENT_ID</code>, <code class="mono">PAYPAL_CLIENT_SECRET</code> y <code class="mono">PAYPAL_MODE</code> en <code class="mono">.env</code> para activar los cobros verificados con ${isCard ? 'tarjeta' : 'PayPal'}.`;
 
- onClick(_data, actions) {
- const buyer = getBuyer();
- const missing = [];
+  const html = `
+    <div class="alert alert-warning" style="width:100%;flex-direction:column;gap:10px;align-items:flex-start">
+      <div style="display:flex;align-items:center;gap:8px;font-weight:700">
+        ${icon('lock', 18)}
+        <span>${title} · Falta ID de cliente</span>
+      </div>
+      <p style="margin:0;color:var(--text-secondary);font-size:0.84rem;line-height:1.6">${detail}</p>
+      ${typeof onSwitchToQr === 'function' ? `
+        <button type="button" class="btn btn-secondary btn-sm" data-switch-qr>
+          ${icon('qr', 15)}
+          <span>Usar Pago con QR mientras tanto</span>
+        </button>` : ''}
+    </div>`;
 
- requiredFields.forEach(([key, label]) => {
- const input = document.querySelector(`[name="${key}"]`);
- if (!buyer[key]) {
- missing.push(label);
- if (input) input.style.borderColor = 'var(--danger)';
- } else if (input) {
- input.style.borderColor = '';
- }
- });
+  return html;
+}
 
- if (missing.length) {
- toast(`Completa los Datos del Comprador: ${missing.join(', ')}`, 'warning');
- document.querySelector(`[name="${requiredFields.find(([key]) => !buyer[key])[0]}"]`)?.focus();
- return actions.reject();
- }
- return actions.resolve();
- },
+async function renderPayPalButtons({
+  container,
+  totalUsd,
+  getBuyer,
+  reference,
+  paypalConfig,
+  fundingType,
+  onSuccess,
+  onSwitchToQr,
+}) {
+  if (!container) return;
 
- createOrder(_data, actions) {
- return actions.order.create({
- intent: 'CAPTURE',
- purchase_units: [{
- reference_id: `MC${Date.now()}`,
- description: `MotoConnect · Pedido ${reference}`,
- amount: {
- currency_code: 'USD',
- value: totalUsd,
- },
- }],
- });
- },
+  if (!paypalConfig?.serverConfigured || !paypalConfig?.clientId) {
+    container.innerHTML = unconfiguredNotice(paypalConfig, fundingType === 'TARJETA', onSwitchToQr);
+    container.querySelector('[data-switch-qr]')?.addEventListener('click', () => {
+      if (typeof onSwitchToQr === 'function') onSwitchToQr();
+    });
+    return;
+  }
 
- async onApprove(_data, actions) {
- try {
- const details = await actions.order.capture();
- const buyer = getBuyer();
+  container.innerHTML = '<div class="spinner-wrap" style="padding:20px"><div class="spinner" style="width:32px;height:32px"></div></div>';
 
- const order = await api('/pedidos/paypal', {
- method: 'POST',
- body: {
- orderID: details.id,
- buyer,
- items: state.cart,
- subtotal_usd: subtotalUsd,
- total: Number(totalUsd),
- refCode: reference,
- },
- });
+  let paypalSdk;
+  try {
+    paypalSdk = await loadPayPalSdk(paypalConfig.clientId);
+  } catch (err) {
+    container.innerHTML = `<div class="alert alert-danger" style="width:100%">${icon('alert', 18)}<span>${esc(err.message)}</span></div>`;
+    return;
+  }
 
- clearCart();
- toast(`Pago capturado · Pedido ${order.codigo_orden}`, 'success');
- location.hash = '#/mis-pedidos';
- } catch (error) {
- toast(error.message || 'No se pudo registrar el pago', 'danger');
- }
- },
+  const requiredFields = [
+    ['nombre', 'Nombre completo'],
+    ['email', 'Correo electrónico'],
+    ['telefono', 'Teléfono'],
+    ['ci', 'CI / NIT'],
+    ['ciudad', 'Ciudad'],
+    ['direccion', 'Dirección'],
+  ];
 
- onError(error) {
- toast(`Error PayPal: ${error.message || 'operación cancelada'}`, 'danger');
- },
- }).render(container);
+  const fundingSource = fundingType === 'TARJETA'
+    ? paypalSdk.FUNDING?.CARD
+    : paypalSdk.FUNDING?.PAYPAL;
+
+  const buttonConfig = {
+    ...(fundingSource ? { fundingSource } : {}),
+    style: fundingType === 'TARJETA'
+      ? { layout: 'vertical', color: 'black', shape: 'rect', label: 'pay', height: 44 }
+      : { layout: 'vertical', color: 'gold', shape: 'rect', label: 'paypal', height: 44 },
+
+    onClick(_data, actions) {
+      const buyer = getBuyer();
+      const missing = [];
+
+      requiredFields.forEach(([key, label]) => {
+        const input = document.querySelector(`[name="${key}"]`);
+        if (!buyer[key]) {
+          missing.push(label);
+          if (input) input.style.borderColor = 'var(--danger)';
+        } else if (input) {
+          input.style.borderColor = '';
+        }
+      });
+
+      if (missing.length) {
+        toast(`Completa los Datos del Comprador: ${missing.join(', ')}`, 'warning');
+        const firstMissing = requiredFields.find(([key]) => !buyer[key]);
+        if (firstMissing) document.querySelector(`[name="${firstMissing[0]}"]`)?.focus();
+        return actions.reject();
+      }
+      return actions.resolve();
+    },
+
+    async createOrder() {
+      const buyer = getBuyer();
+      const created = await api('/payments/paypal/create-order', {
+        method: 'POST',
+        body: {
+          buyer,
+          items: state.cart,
+          refCode: reference,
+        },
+      });
+      return created.orderID;
+    },
+
+    async onApprove(data) {
+      try {
+        const order = await api('/payments/paypal/capture-order', {
+          method: 'POST',
+          body: {
+            orderID: data.orderID,
+            paymentSource: fundingType,
+          },
+        });
+
+        clearCart();
+        if (typeof onSuccess === 'function') {
+          onSuccess(order);
+        } else {
+          toast(`Pago verificado (${fmtBs(totalUsd)} / $${fmt(totalUsd)} USD) · Pedido ${order.codigo_orden}`, 'success');
+          location.hash = '#/mis-pedidos';
+        }
+      } catch (error) {
+        toast(error.message || 'No se pudo capturar el pago en el servidor', 'danger');
+      }
+    },
+
+    onError(error) {
+      toast(`Error en pasarela de pago: ${error?.message || 'operación cancelada'}`, 'danger');
+    },
+  };
+
+  container.innerHTML = '';
+  try {
+    const buttons = paypalSdk.Buttons(buttonConfig);
+    if (typeof buttons.isEligible === 'function' && !buttons.isEligible()) {
+      container.innerHTML = `
+        <div class="alert alert-warning" style="width:100%">
+          ${icon('info', 18)}
+          <span>Esta opción de pago no está habilitada para la región o navegador actual. Puedes utilizar PayPal o Pago con QR.</span>
+        </div>`;
+      return;
+    }
+    await buttons.render(container);
+  } catch (err) {
+    if (container.isConnected) {
+      container.innerHTML = `<div class="alert alert-warning" style="width:100%">${icon('info', 18)}<span>No se pudo renderizar el botón de pago (${esc(err?.message || 'reintenta o usa QR')}).</span></div>`;
+    }
+  }
+}
+
+export async function mountPayPal(totalUsd, getBuyer, reference, paypalConfig, onSuccess, onSwitchToQr) {
+  const container = document.querySelector('#paypal-button-container');
+  return renderPayPalButtons({
+    container,
+    totalUsd,
+    getBuyer,
+    reference,
+    paypalConfig,
+    fundingType: 'PAYPAL',
+    onSuccess,
+    onSwitchToQr,
+  });
+}
+
+export async function mountCardPayment(totalUsd, getBuyer, reference, paypalConfig, onSuccess, onSwitchToQr) {
+  const container = document.querySelector('#card-button-container');
+  return renderPayPalButtons({
+    container,
+    totalUsd,
+    getBuyer,
+    reference,
+    paypalConfig,
+    fundingType: 'TARJETA',
+    onSuccess,
+    onSwitchToQr,
+  });
 }

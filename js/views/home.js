@@ -1,95 +1,233 @@
 /* ============================================================
-   MotoConnect — views/home.js  (#/)
-   Inicio comercial: hero con logo, accesos por categoría, sección de confianza
+   MotoConnect — views/home.js (#/)
+   Portada institucional y comercial de MotoConnect (sin inventario ni precios)
    ============================================================ */
 
-import { api } from '../api.js';
-import { esc } from '../utils.js';
-import { productCard, bindProductCards } from '../components/productCard.js';
+import { esc, icon } from '../utils.js';
 
-const QUICK_ACCESS = [
-  { label: 'Trabajo y Delivery', copy: 'Economicas, bajo consumo y repuestos accesibles.', cat: 'Trabajo', icon: 'W' },
-  { label: 'Ciudad y Diario', copy: 'Agiles, automaticas y eficientes para el trafico.', cat: 'Urbana', icon: 'C' },
-  { label: 'Rutas y Adventure', copy: 'Suspension larga y doble proposito para altura.', cat: 'Adventure', icon: 'A' },
-  { label: 'Deportivas y Alta Gama', copy: 'Potencia, curvas y estilo premium.', cat: 'Supersport', icon: 'D' },
+const VALUE_PROPOSITIONS = [
+  {
+    icon: 'clipboard',
+    title: 'Inspección PDI de 40 Puntos',
+    copy: 'Cada motocicleta atraviesa una lista técnica de 40 verificaciones certificadas antes de salir de almacén, con asignación única de VIN y precinto de empaque.',
+  },
+  {
+    icon: 'shield',
+    title: 'Pagos Auditados y Trazables',
+    copy: 'Validación en servidor para pagos en línea con PayPal o tarjeta (Visa y Mastercard) y revisión documental rigurosa para pagos mediante código QR.',
+  },
+  {
+    icon: 'truck',
+    title: 'Despacho y Entrega Certificada',
+    copy: 'Seguimiento en tiempo real desde la confirmación de pago hasta la recepción física con firma digital en pantalla y emisión de certificado de garantía.',
+  },
+  {
+    icon: 'compass',
+    title: 'Asesoría Técnica Especializada',
+    copy: 'Recomendador guiado de 3 preguntas, comparador técnico lado a lado y asistente técnico conectado al inventario real para ayudarte a elegir sin conjeturas.',
+  },
 ];
 
-const GUARANTEES = [
-  { title: 'Garantia de Fabrica 24 Meses', copy: 'Respaldo oficial del fabricante en todos los modelos.' },
-  { title: 'Inspeccion PDI 40 Puntos', copy: 'Revision tecnica certificada antes de cada entrega.' },
-  { title: 'Acta de Entrega y Firma Digital', copy: 'Documentacion completa y trazable en cada operacion.' },
-  { title: 'Cobertura Total Incluida', copy: 'Proteccion activa desde el dia de la entrega.' },
+const PURCHASE_STEPS = [
+  {
+    step: '01',
+    icon: 'search',
+    title: 'Elige o déjate asesorar',
+    copy: 'Explora el catálogo por tipo de uso o responde 3 preguntas en el asesor para descubrir las opciones compatibles con tu ruta y experiencia.',
+  },
+  {
+    step: '02',
+    icon: 'lock',
+    title: 'Compra y pago verificable',
+    copy: 'Registra tu orden con cálculo transparente en servidor. Elige PayPal, tarjeta de débito/crédito o sube tu comprobante de pago por QR para validación.',
+  },
+  {
+    step: '03',
+    icon: 'wrench',
+    title: 'Preparación PDI y asignación VIN',
+    copy: 'Almacén verifica 40 puntos técnicos, asigna el número de chasis único (VIN) y sella el código de empaque antes del despacho.',
+  },
+  {
+    step: '04',
+    icon: 'award',
+    title: 'Recepción y certificado digital',
+    copy: 'Sigue cada cambio de estado en Mis Pedidos, firma la conformidad al recibir tu unidad y descarga tu Certificado Digital de Entrega y Garantía.',
+  },
+];
+
+const SECURITY_HIGHLIGHTS = [
+  {
+    icon: 'lock',
+    title: 'Integridad financiera en servidor',
+    copy: 'Los importes, impuestos de trámite (5%) y reserva atómica de inventario se calculan exclusivamente en el backend sobre el catálogo vigente.',
+  },
+  {
+    icon: 'check-circle',
+    title: 'Control anti-duplicidad',
+    copy: 'Ninguna transacción PayPal puede reutilizarse ni aprobarse dos veces, y el stock se descuenta una única vez dentro de transacciones SQLite seguras.',
+  },
+  {
+    icon: 'file',
+    title: 'Comprobantes bajo acceso controlado',
+    copy: 'Los comprobantes de pago por QR se almacenan en un directorio privado protegido por sesión y permisos por rol.',
+  },
+];
+
+const DELIVERY_HIGHLIGHTS = [
+  {
+    icon: 'clock',
+    title: 'Estados logísticos auditables',
+    copy: 'Visualiza exactamente si tu pedido está en revisión, listo para preparar, en inspección PDI, empacado, en ruta o entregado.',
+  },
+  {
+    icon: 'package',
+    title: 'Trazabilidad de chasis y empaque',
+    copy: 'Cada entrega registra el VIN único de la unidad, el código de empaque, el responsable de almacén y el historial operativo completo.',
+  },
+  {
+    icon: 'printer',
+    title: 'Acta y garantía oficial de 24 meses',
+    copy: 'Al completar la entrega con firma digital en pantalla se habilita el Certificado Digital imprimible con respaldo oficial de MotoConnect S.R.L.',
+  },
 ];
 
 export async function home(root) {
   root.innerHTML = `
-    <section class="hero" aria-label="MotoConnect">
-      <div class="hero-bg" style="background-image:url('/images/productos/placeholder.svg')"></div>
+    <section class="hero home-hero" aria-label="Presentación MotoConnect">
+      <div class="home-hero-grid-bg" aria-hidden="true"></div>
       <div class="hero-overlay"></div>
-      <div class="hero-content">
-        <img src="/assets/logo-motoconnect.jpg" alt="MotoConnect" style="height:64px;margin-bottom:16px;border-radius:8px" />
-        <span class="hero-eyebrow">Concesionario Oficial - Bolivia</span>
-        <h1>La Experiencia de<br /><span>Conduccion</span> Definitiva</h1>
-        <p>Motocicletas para trabajo, ciudad, rutas y alto desempeno<br />Entrega nacional garantizada - Garantia oficial - Precios en Bs</p>
+      <div class="hero-content home-hero-content">
+        <div class="home-brand-frame">
+          <img src="/assets/logo-motoconnect.jpg" alt="Logo oficial MotoConnect" class="home-brand-logo" />
+        </div>
+        <span class="hero-eyebrow">Concesionario Digital Certificado · Bolivia</span>
+        <h1>Compra tu motocicleta con <span>trazabilidad total</span> de principio a fin</h1>
+        <p>
+          MotoConnect integra asesoramiento técnico inteligente, validación segura de pagos,
+          inspección PDI de 40 puntos y entrega certificada con firma digital en una sola plataforma.
+        </p>
         <div class="hero-ctas">
-          <a href="#/catalogo" class="btn btn-primary btn-lg">Explorar Catalogo Completo</a>
-          <a href="#/recomendador" class="btn btn-secondary btn-lg">Asesor por Preguntas</a>
+          <a href="#/catalogo" class="btn btn-primary btn-lg">
+            ${icon('layers', 20)}
+            <span>Explorar Catálogo</span>
+          </a>
+          <a href="#/recomendador" class="btn btn-secondary btn-lg">
+            ${icon('compass', 20)}
+            <span>Asesor por Preguntas</span>
+          </a>
+        </div>
+        <div class="home-hero-metrics" aria-label="Pilares de servicio">
+          <div class="home-metric-pill">${icon('clipboard', 16)} <span>Inspección PDI 40 puntos</span></div>
+          <div class="home-metric-pill">${icon('shield', 16)} <span>Garantía oficial 24 meses</span></div>
+          <div class="home-metric-pill">${icon('truck', 16)} <span>Entrega nacional certificada</span></div>
         </div>
       </div>
     </section>
 
-    <section class="section">
+    <section class="section" aria-labelledby="home-value-title">
       <div class="section-header">
-        <span class="section-label">Accesos rapidos</span>
-        <h2>Explora por tipo de uso</h2>
-        <p>Encuentra la moto ideal para tu necesidad en un clic</p>
+        <span class="section-label">Propuesta de valor</span>
+        <h2 id="home-value-title">Por qué elegir MotoConnect</h2>
+        <p>Un concesionario digital diseñado para brindar transparencia operativa, seguridad documental y respaldo técnico real.</p>
       </div>
-      <div class="categories-grid">
-        ${QUICK_ACCESS.map(item => `
-          <a class="category-card" href="#/catalogo?cat=${encodeURIComponent(item.cat)}">
-            <div class="category-card-thumb" style="display:flex;align-items:center;justify-content:center;font-size:2.5rem;font-weight:700;background:var(--bg-elevated);color:var(--accent-primary)">
-              ${item.icon}
-            </div>
-            <div class="category-card-info">
-              <h3>${esc(item.label)}</h3>
-              <p>${esc(item.copy)}</p>
-              <span class="category-link">Ver modelos</span>
-            </div>
-          </a>
+      <div class="home-cards-grid">
+        ${VALUE_PROPOSITIONS.map(item => `
+          <article class="home-feature-card">
+            <div class="home-feature-icon">${icon(item.icon, 22)}</div>
+            <h3>${esc(item.title)}</h3>
+            <p>${esc(item.copy)}</p>
+          </article>
         `).join('')}
       </div>
     </section>
 
-    <div class="guarantees-section">
-      <div class="guarantees-grid">
-        ${GUARANTEES.map(item => `
-          <div class="guarantee-item">
-            <div class="guarantee-icon" style="font-size:1.5rem;font-weight:700;color:var(--accent-primary)">+</div>
-            <div class="guarantee-text">
-              <h4>${esc(item.title)}</h4>
-              <p>${esc(item.copy)}</p>
+    <section class="home-band-surface" aria-labelledby="home-process-title">
+      <div class="section">
+        <div class="section-header">
+          <span class="section-label">Proceso de compra</span>
+          <h2 id="home-process-title">Cómo funciona de extremo a extremo</h2>
+          <p>Cuatro etapas claras y verificables desde la elección de tu unidad hasta la recepción con garantía oficial.</p>
+        </div>
+        <div class="home-process-grid">
+          ${PURCHASE_STEPS.map(step => `
+            <article class="home-step-card">
+              <div class="home-step-top">
+                <span class="home-step-num mono">${esc(step.step)}</span>
+                <span class="home-step-icon">${icon(step.icon, 20)}</span>
+              </div>
+              <h3>${esc(step.title)}</h3>
+              <p>${esc(step.copy)}</p>
+            </article>
+          `).join('')}
+        </div>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="home-trust-title">
+      <div class="section-header">
+        <span class="section-label">Seguridad y logística</span>
+        <h2 id="home-trust-title">Pagos verificables y seguimiento transparente</h2>
+        <p>Cada operación queda auditada por área responsable para proteger tanto al comprador como al inventario.</p>
+      </div>
+      <div class="home-trust-split">
+        <article class="card-dark home-trust-card">
+          <div class="home-trust-head">
+            <span class="home-trust-badge">${icon('shield', 20)}</span>
+            <div>
+              <span class="section-label" style="margin-bottom:2px">Seguridad de pagos</span>
+              <h3>Protección en cada transacción</h3>
             </div>
           </div>
-        `).join('')}
-      </div>
-    </div>
-  `;
+          <div class="home-trust-list">
+            ${SECURITY_HIGHLIGHTS.map(item => `
+              <div class="home-trust-item">
+                <div class="home-trust-item-icon">${icon(item.icon, 18)}</div>
+                <div>
+                  <h4>${esc(item.title)}</h4>
+                  <p>${esc(item.copy)}</p>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </article>
 
-  try {
-    const products = await api('/productos');
-    const featured = products.filter(p => Number(p.destacado) === 1).slice(0, 3);
-    const grid = root.querySelector('.products-grid');
-    if (!grid) {
-      // Create a featured grid
-      const section = document.createElement('section');
-      section.className = 'section';
-      section.innerHTML = `<div class="section-header"><span class="section-label">Destacados</span><h2>Modelos Destacados</h2><p>Seleccion especial de motocicletas</p></div><div class="products-grid" id="featured-grid"></div>`;
-      root.appendChild(section);
-    }
-    const gridEl = root.querySelector('#featured-grid') || root.querySelector('.products-grid');
-    bindProductCards(gridEl);
-    gridEl.innerHTML = featured.length ? featured.map(productCard).join('') : '';
-  } catch {
-    // Features section already has content, skip
-  }
+        <article class="card-dark home-trust-card">
+          <div class="home-trust-head">
+            <span class="home-trust-badge secondary">${icon('truck', 20)}</span>
+            <div>
+              <span class="section-label" style="margin-bottom:2px">Seguimiento y entrega</span>
+              <h3>Control logístico hasta tu puerta</h3>
+            </div>
+          </div>
+          <div class="home-trust-list">
+            ${DELIVERY_HIGHLIGHTS.map(item => `
+              <div class="home-trust-item">
+                <div class="home-trust-item-icon secondary">${icon(item.icon, 18)}</div>
+                <div>
+                  <h4>${esc(item.title)}</h4>
+                  <p>${esc(item.copy)}</p>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="home-cta-band">
+      <div class="section" style="padding-top:56px;padding-bottom:56px">
+        <div class="home-cta-card">
+          <div>
+            <span class="section-label">Comienza ahora</span>
+            <h2>Encuentra la motocicleta adecuada para tu camino</h2>
+            <p>Consulta el catálogo completo con disponibilidad actualizada en vivo o utiliza el asesor guiado de 3 preguntas.</p>
+          </div>
+          <div class="home-cta-actions">
+            <a href="#/catalogo" class="btn btn-primary btn-lg">Ir al Catálogo</a>
+            <a href="#/recomendador" class="btn btn-secondary btn-lg">Usar Asesor</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
 }

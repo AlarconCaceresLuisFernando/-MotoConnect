@@ -12,9 +12,10 @@ import { orders } from './views/orders.js';
 import { panel } from './views/panel.js';
 import { login } from './views/login.js';
 import { recommender } from './views/recommender.js';
-import { initNavbar, refreshNav } from './components/navbar.js';
+import { initNavbar, refreshNav, loadAuthConfig } from './components/navbar.js';
 import { initFooter } from './components/footer.js';
 import { initAiAssistant } from './components/aiAssistant.js';
+import { esc, icon, toast } from './utils.js';
 
 const root = document.querySelector('#app-container');
 
@@ -26,6 +27,13 @@ function currentPath() {
 
 async function route() {
   const path = currentPath();
+  document.querySelector('#cart-drawer')?.classList.remove('open');
+  document.querySelector('#cart-drawer')?.setAttribute('aria-hidden', 'true');
+  document.querySelector('#cart-overlay')?.classList.remove('open');
+  document.querySelector('#cart-overlay')?.setAttribute('aria-hidden', 'true');
+  document.querySelector('#nav-links')?.classList.remove('open');
+  document.querySelector('#hamburger-btn')?.classList.remove('open');
+  document.querySelector('#hamburger-btn')?.setAttribute('aria-expanded', 'false');
   root.innerHTML = '';
   window.scrollTo(0, 0);
   refreshNav();
@@ -44,7 +52,7 @@ async function route() {
       root.innerHTML = `
         <section class="section">
           <div class="empty-state">
-            <span class="empty-icon">Pagina no encontrada</span>
+            <span class="empty-icon">${icon('alert', 48)}</span>
             <h3>Página no encontrada</h3>
             <p>La ruta solicitada no existe o fue movida.</p>
             <a href="#/" class="btn btn-primary">Volver al Inicio</a>
@@ -55,9 +63,9 @@ async function route() {
     root.innerHTML = `
       <section class="section">
         <div class="empty-state">
-          <span class="empty-icon">No se pudo cargar</span>
+          <span class="empty-icon">${icon('alert', 48)}</span>
           <h3>No se pudo cargar la página</h3>
-          <p>${error.message}</p>
+          <p>${esc(error.message)}</p>
           <a href="#/" class="btn btn-primary">Volver al Inicio</a>
         </div>
       </section>`;
@@ -66,9 +74,18 @@ async function route() {
   refreshNav();
 }
 
+window.addEventListener('mc:auth-expired', () => {
+  refreshNav();
+  toast('Tu sesión expiró. Inicia sesión nuevamente.', 'warning');
+  const p = currentPath();
+  if (p === '/panel' || p === '/mis-pedidos' || p === '/checkout') {
+    location.hash = '#/login';
+  }
+});
+
 initNavbar();
 initFooter();
 initAiAssistant();
-refreshNav();
+loadAuthConfig().then(() => refreshNav());
 window.addEventListener('hashchange', route);
 route();
