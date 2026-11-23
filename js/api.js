@@ -22,13 +22,28 @@ export async function api(path, options = {}) {
     }
   }
 
-  const response = await fetch(API + path, {
-    ...options,
-    headers,
-    body,
-    credentials: 'same-origin',
-    cache: 'no-store',
-  });
+  const timeoutMs = Number(options.timeoutMs || 30000);
+  const controller = new AbortController();
+  const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
+  let response;
+  try {
+    response = await fetch(API + path, {
+      ...options,
+      headers,
+      body,
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal: options.signal || controller.signal,
+    });
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Tiempo de espera agotado al conectar con el servidor.');
+    }
+    throw err;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 
   const data = await response.json().catch(() => ({}));
 

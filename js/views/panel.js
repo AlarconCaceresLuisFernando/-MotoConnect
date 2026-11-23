@@ -471,7 +471,7 @@ export async function panel(root) {
           if (res.sent) {
             toast(res.message, 'success');
           } else {
-            toast('Falta configurar SMTP en el servidor; descargando respaldo...', 'info');
+            toast(res.smtpBlocked ? 'Render bloqueó puertos SMTP; descargando PDF de respaldo...' : 'SMTP pendiente; descargando PDF de respaldo...', 'info');
             await downloadPdfBlob(`/api/pedidos/${orderId}/documentos-pdf`, `MotoConnect-Papeles-${code}.pdf`, state.token);
           }
         } catch (err) {

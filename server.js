@@ -291,12 +291,128 @@ function getSmtpConfig() {
   const port = Number(process.env.SMTP_PORT || (host === 'smtp.gmail.com' ? 465 : 587));
   const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
   const from = (process.env.SMTP_FROM || '').trim() || (user ? `MotoConnect Bolivia <${user}>` : '');
-  return { host, port, secure, user, pass, from };
+  const brevoKey = (process.env.BREVO_API_KEY || '').trim();
+  const resendKey = (process.env.RESEND_API_KEY || '').trim();
+  return { host, port, secure, user, pass, from, brevoKey, resendKey };
 }
 
 function isSmtpConfigured() {
   const cfg = getSmtpConfig();
-  return Boolean(cfg.host && cfg.user && cfg.pass);
+  return Boolean(cfg.brevoKey || cfg.resendKey || (cfg.host && cfg.user && cfg.pass));
+}
+
+function parseFromHeader(fromStr, fallbackEmail) {
+  const m = String(fromStr || '').match(/^(.+?)\s*<([^>]+)>$/);
+  if (m) return { name: m[1].replace(/^["']|["']$/g, '').trim(), email: m[2].trim() };
+  return { name: 'MotoConnect Bolivia', email: (fromStr || fallbackEmail || '').trim() };
+}
+
+async function sendViaBrevo({ cfg, to, subject, text, attachments }) {
+  const sender = parseFromHeader(cfg.from, cfg.user);
+  if (!sender.email) {
+    throw new Error('Configura SMTP_USER o SMTP_FROM con tu correo remitente para enviar vía Brevo.');
+  }
+  const formattedAttachments = attachments.map(att => ({
+    name: att.filename,
+    content: (att.content ? att.content : fs.readFileSync(att.path)).toString('base64'),
+  }));
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: {
+        'api-key': cfg.brevoKey,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        sender,
+        to: [{ email: to }],
+        replyTo: { email: sender.email },
+        subject,
+        textContent: text,
+        attachment: formattedAttachments,
+      }),
+      signal: controller.signal,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.message || `Brevo error HTTP ${res.status}`);
+    }
+    return sender.email;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function sendViaResend({ cfg, to, subject, text, attachments }) {
+  const fromAddress = cfg.from || 'MotoConnect Bolivia <onboarding@resend.dev>';
+  const formattedAttachments = attachments.map(att => ({
+    filename: att.filename,
+    content: (att.content ? att.content : fs.readFileSync(att.path)).toString('base64'),
+  }));
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${cfg.resendKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: fromAddress,
+      to: [to],
+      ...(cfg.user ? { reply_to: cfg.user } : {}),
+      subject,
+      text,
+      attachments: formattedAttachments,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.message || `Resend error HTTP ${res.status}`);
+  }
+  return cfg.user || fromAddress;
+}
+
+async function sendViaSmtpWithFallback({ cfg, to, subject, text, attachments }) {
+  const attempts = [{ port: cfg.port, secure: cfg.secure }];
+  if (/gmail\.com$/i.test(cfg.host) && cfg.port === 465) {
+    attempts.push({ port: 587, secure: false });
+  }
+
+  let lastErr = null;
+  for (const attempt of attempts) {
+    try {
+      const transporter = nodemailer.createTransport({
+        host: cfg.host,
+        port: attempt.port,
+        secure: attempt.secure,
+        requireTLS: !attempt.secure,
+        family: 4,
+        connectionTimeout: 7000,
+        greetingTimeout: 7000,
+        socketTimeout: 10000,
+        auth: {
+          user: cfg.user,
+          pass: cfg.pass,
+        },
+      });
+      await transporter.sendMail({
+        from: cfg.from,
+        replyTo: cfg.user,
+        to,
+        subject,
+        text,
+        attachments,
+      });
+      return cfg.user;
+    } catch (err) {
+      lastErr = err;
+      const isAuthErr = err?.code === 'EAUTH' || err?.responseCode === 535;
+      if (isAuthErr) break;
+    }
+  }
+  throw lastErr;
 }
 
 // ─────────────────────────────────────────────
@@ -1369,34 +1485,56 @@ app.post('/api/pedidos/:id/enviar-documentos', requireAuth, async (req, res) => 
     }
 
     const smtp = getSmtpConfig();
-    const transporter = nodemailer.createTransport({
-      host: smtp.host,
-      port: smtp.port,
-      secure: smtp.secure,
-      auth: {
-        user: smtp.user,
-        pass: smtp.pass,
-      },
-    });
+    const subject = `MotoConnect · Papeles Oficiales y Carpeta de Compra (${pedido.codigo_orden})`;
+    const text = `Hola ${pedido.cliente_nombre},\n\nAdjuntamos en PDF la documentación oficial de la orden ${pedido.codigo_orden} (Factura Comercial, DUA/Póliza de Importación, carpeta RUAT, SOAT, PDI 40 puntos y Garantía de 24 meses).\n\n¿Dudas? Contáctanos por WhatsApp al ${WHATSAPP_DISPLAY}.\nMotoConnect Bolivia S.R.L.`;
 
-    await transporter.sendMail({
-      from: smtp.from,
-      replyTo: smtp.user,
-      to: recipient,
-      subject: `MotoConnect · Papeles Oficiales y Carpeta de Compra (${pedido.codigo_orden})`,
-      text: `Hola ${pedido.cliente_nombre},\n\nAdjuntamos en PDF la documentación oficial de la orden ${pedido.codigo_orden} (Factura Comercial, DUA/Póliza de Importación, carpeta RUAT, SOAT, PDI 40 puntos y Garantía de 24 meses).\n\n¿Dudas? Contáctanos por WhatsApp al ${WHATSAPP_DISPLAY}.\nMotoConnect Bolivia S.R.L.`,
-      attachments,
-    });
+    let senderUsed = smtp.user;
+    try {
+      if (smtp.brevoKey) {
+        senderUsed = await sendViaBrevo({ cfg: smtp, to: recipient, subject, text, attachments });
+      } else if (smtp.resendKey) {
+        senderUsed = await sendViaResend({ cfg: smtp, to: recipient, subject, text, attachments });
+      } else {
+        senderUsed = await sendViaSmtpWithFallback({ cfg: smtp, to: recipient, subject, text, attachments });
+      }
+    } catch (sendErr) {
+      const msg = String(sendErr?.message || '');
+      const code = String(sendErr?.code || '');
+      const isPortBlocked = /ETIMEDOUT|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ESOCKET|timeout|Greeting never received/i.test(
+        `${code} ${msg}`
+      );
+      if (isPortBlocked) {
+        return res.json({
+          ok: true,
+          sent: false,
+          smtpBlocked: true,
+          recipient,
+          pdfUrl: `/api/pedidos/${id}/documentos-pdf`,
+          mailtoSubject: `MotoConnect · Papeles Oficiales Orden ${pedido.codigo_orden}`,
+          mailtoBody: `Estimado/a ${pedido.cliente_nombre},\n\nAdjunto encontrarás tu expediente oficial de compra y papeles vehiculares (Factura, DUA/Póliza de Importación, RUAT, SOAT y Garantía) para la orden ${pedido.codigo_orden}.\n\nSoporte WhatsApp: ${WHATSAPP_DISPLAY}`,
+          message:
+            'Este servidor en la nube (plan gratuito de Render) bloquea los puertos SMTP salientes 465/587. Para enviar automáticamente por HTTPS desde Render agrega BREVO_API_KEY en Environment, o usa el botón inferior para enviarlo desde tu correo.',
+        });
+      }
+      const isAuthErr = sendErr?.code === 'EAUTH' || sendErr?.responseCode === 535 || /535-5\.7\.8|Username and Password not accepted/i.test(msg);
+      if (isAuthErr) {
+        return res.status(400).json({
+          error:
+            'Gmail rechazó el usuario o contraseña (535). Verifica que SMTP_USER sea tu Gmail completo y SMTP_PASS sea una Contraseña de Aplicación de 16 letras (sin espacios), o usa BREVO_API_KEY en Render.',
+        });
+      }
+      throw sendErr;
+    }
 
-    logAudit(id, req.user, 'DOCUMENTOS_ENVIADOS_CORREO', `PDF enviado desde ${smtp.user} a ${recipient}`);
+    logAudit(id, req.user, 'DOCUMENTOS_ENVIADOS_CORREO', `PDF enviado desde ${senderUsed} a ${recipient}`);
     res.json({
       ok: true,
       sent: true,
       smtpConfigured: true,
-      sender: smtp.user,
+      sender: senderUsed,
       recipient,
       pdfUrl: `/api/pedidos/${id}/documentos-pdf`,
-      message: `Documentación oficial en PDF enviada desde ${smtp.user} a ${recipient}.`,
+      message: `Documentación oficial en PDF enviada desde ${senderUsed} a ${recipient}.`,
     });
   } catch (err) {
     console.error('[POST /api/pedidos/:id/enviar-documentos]', err);

@@ -440,7 +440,12 @@ export async function orders(root) {
                 feedback.innerHTML = `<div class="alert alert-success" style="font-size:0.82rem;padding:10px 12px">${icon('check-circle', 15)}<span>${esc(res.message)}</span></div>`;
               }
             } else {
-              toast('PDF listo para descargar (SMTP pendiente en servidor)', 'info');
+              toast(
+                res.smtpBlocked
+                  ? 'Servidor nube bloquea SMTP (puertos 465/587); usa BREVO_API_KEY o descarga el PDF'
+                  : 'PDF listo para descargar (SMTP pendiente en servidor)',
+                'info'
+              );
               const mailto = `mailto:${encodeURIComponent(res.recipient || '')}?subject=${encodeURIComponent(res.mailtoSubject || '')}&body=${encodeURIComponent(res.mailtoBody || '')}`;
               if (feedback) {
                 feedback.innerHTML = `
@@ -452,6 +457,9 @@ export async function orders(root) {
             }
           } catch (err) {
             toast(err.message, 'danger');
+            if (feedback) {
+              feedback.innerHTML = `<div class="alert alert-danger" style="font-size:0.82rem;padding:10px 12px">${esc(err.message)}</div>`;
+            }
           } finally {
             button.disabled = false;
             button.innerHTML = orig;

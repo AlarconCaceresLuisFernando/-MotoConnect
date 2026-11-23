@@ -181,7 +181,12 @@ function finishOrder(root, order, message) {
           statusBox.innerHTML = `<div class="alert alert-success" style="padding:10px 12px">${icon('check-circle', 15)}<span>${esc(res.message)}</span></div>`;
         }
       } else {
-        toast('PDF listo para descarga (SMTP pendiente en servidor)', 'info');
+        toast(
+          res.smtpBlocked
+            ? 'Servidor nube bloquea SMTP (puertos 465/587); usa BREVO_API_KEY o descarga el PDF'
+            : 'PDF listo para descarga (SMTP pendiente en servidor)',
+          'info'
+        );
         const mailto = `mailto:${encodeURIComponent(res.recipient || '')}?subject=${encodeURIComponent(res.mailtoSubject || '')}&body=${encodeURIComponent(res.mailtoBody || '')}`;
         if (statusBox) {
           statusBox.innerHTML = `
