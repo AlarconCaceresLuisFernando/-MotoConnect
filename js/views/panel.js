@@ -217,7 +217,17 @@ function setupSignature(canvas) {
   canvas.addEventListener('pointerleave', stop);
 }
 
-function openDecisionModal({ title, bodyHtml, confirmLabel, confirmClass = 'btn-primary', requireInput = false, defaultInput = '' }) {
+function openDecisionModal({
+  title,
+  bodyHtml,
+  confirmLabel,
+  confirmClass = 'btn-primary',
+  requireInput = false,
+  defaultInput = '',
+  inputLabel = 'Motivo (visible para el cliente) *',
+  inputType = 'text',
+  inputPlaceholder = 'Ej. Comprobante ilegible o monto incorrecto',
+}) {
   return new Promise(resolve => {
     const container = document.querySelector('#modals-container');
     if (!container) {
@@ -236,8 +246,8 @@ function openDecisionModal({ title, bodyHtml, confirmLabel, confirmClass = 'btn-
             ${bodyHtml}
             ${requireInput ? `
               <div class="form-group" style="margin-top:14px">
-                <label for="modal-reason-input">Motivo (visible para el cliente) *</label>
-                <input id="modal-reason-input" type="text" value="${esc(defaultInput)}" placeholder="Ej. Comprobante ilegible o monto incorrecto" />
+                <label for="modal-reason-input">${esc(inputLabel)}</label>
+                <input id="modal-reason-input" type="${esc(inputType)}" value="${esc(defaultInput)}" placeholder="${esc(inputPlaceholder)}" />
               </div>` : ''}
           </div>
           <div class="modal-actions">
@@ -260,7 +270,7 @@ function openDecisionModal({ title, bodyHtml, confirmLabel, confirmClass = 'btn-
       if (requireInput) {
         const val = container.querySelector('#modal-reason-input')?.value.trim() || '';
         if (!val) {
-          toast('Ingresa el motivo del rechazo', 'warning');
+          toast('Completa el campo requerido antes de continuar.', 'warning');
           return;
         }
         finish(val);
@@ -405,7 +415,7 @@ export async function panel(root) {
             <table class="inventory-table">
               <thead>
                 <tr>
-                  <th>Orden</th><th>Cliente</th><th>Pago</th><th>Logística</th><th>Total</th><th>Fecha</th>
+                  <th>Orden</th><th>Cliente</th><th>Pago</th><th>Logística</th><th>Total</th><th>Fecha</th><th>Papeles</th>
                 </tr>
               </thead>
               <tbody>
@@ -417,6 +427,11 @@ export async function panel(root) {
                     <td>${statusBadge(order.estado_logistico)}</td>
                     <td class="mono">${fmtBs(order.total_usd)}</td>
                     <td class="text-muted" style="font-size:0.8rem">${formatDate(order.fecha_creacion, false)}</td>
+                    <td>
+                      <button type="button" class="btn btn-outline btn-sm" data-panel-send-pdf="${order.id}" data-code="${esc(order.codigo_orden)}" data-email="${esc(order.cliente_email || '')}">
+                        ${icon('mail', 13)} <span>Enviar PDF</span>
+                      </button>
+                    </td>
                   </tr>`).join('')}
               </tbody>
             </table>
@@ -425,6 +440,48 @@ export async function panel(root) {
     `;
 
     bindRefresh();
+    content.querySelectorAll('[data-panel-send-pdf]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const orderId = btn.dataset.panelSendPdf;
+        const code = btn.dataset.code || '';
+        const targetEmail = await openDecisionModal({
+          title: `Enviar papeles PDF · ${code}`,
+          bodyHtml: '<p>Escribe el correo electrónico de la persona a quien deseas enviar la carpeta oficial en PDF (Factura, DUA/Póliza, RUAT, SOAT y Garantía):</p>',
+          confirmLabel: 'Enviar PDF por correo',
+          confirmClass: 'btn-primary',
+          requireInput: true,
+          defaultInput: btn.dataset.email || '',
+          inputLabel: 'Correo electrónico del destinatario *',
+          inputType: 'email',
+          inputPlaceholder: 'cliente@gmail.com',
+        });
+        if (!targetEmail) return;
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+          toast('Ingresa un correo electrónico válido.', 'warning');
+          return;
+        }
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.textContent = 'Enviando...';
+        try {
+          const res = await api(`/pedidos/${orderId}/enviar-documentos`, {
+            method: 'POST',
+            body: { email: targetEmail },
+          });
+          if (res.sent) {
+            toast(res.message, 'success');
+          } else {
+            toast('Falta configurar SMTP en el servidor; descargando respaldo...', 'info');
+            await downloadPdfBlob(`/api/pedidos/${orderId}/documentos-pdf`, `MotoConnect-Papeles-${code}.pdf`, state.token);
+          }
+        } catch (err) {
+          toast(err.message, 'danger');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = orig;
+        }
+      });
+    });
   }
 
   /* ---------- Pagos ---------- */

@@ -280,12 +280,23 @@ function slugifyProduct(raw) {
     .slice(0, 80);
 }
 
+function getSmtpConfig() {
+  const user = (process.env.SMTP_USER || '').trim();
+  const rawPass = (process.env.SMTP_PASS || '').trim();
+  let host = (process.env.SMTP_HOST || '').trim();
+  if (!host && /@gmail\.com$/i.test(user)) {
+    host = 'smtp.gmail.com';
+  }
+  const pass = /gmail\.com$/i.test(host) ? rawPass.replace(/\s+/g, '') : rawPass;
+  const port = Number(process.env.SMTP_PORT || (host === 'smtp.gmail.com' ? 465 : 587));
+  const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
+  const from = (process.env.SMTP_FROM || '').trim() || (user ? `MotoConnect Bolivia <${user}>` : '');
+  return { host, port, secure, user, pass, from };
+}
+
 function isSmtpConfigured() {
-  return Boolean(
-    process.env.SMTP_HOST &&
-    process.env.SMTP_USER &&
-    process.env.SMTP_PASS
-  );
+  const cfg = getSmtpConfig();
+  return Boolean(cfg.host && cfg.user && cfg.pass);
 }
 
 // ─────────────────────────────────────────────
@@ -1298,13 +1309,16 @@ app.post('/api/pedidos/:id/enviar-documentos', requireAuth, async (req, res) => 
     if (!pedido) return res.status(404).json({ error: 'Pedido no encontrado.' });
 
     const isOwner = pedido.cliente_email.toLowerCase() === req.user.email.toLowerCase();
-    const isOperative = ['VERIFICADOR_PAGOS', 'DESPACHO_ENTREGA', 'ADMIN'].includes(req.user.rol);
+    const isOperative = ['VERIFICADOR_PAGOS', 'ALMACEN_EMPAQUE', 'DESPACHO_ENTREGA', 'ADMIN'].includes(req.user.rol);
     if (!isOwner && !isOperative) {
       return res.status(403).json({ error: 'Acceso denegado.' });
     }
 
     const rawDest = typeof req.body?.email === 'string' ? req.body.email.trim() : '';
-    const recipient = rawDest && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawDest) ? rawDest : pedido.cliente_email;
+    if (rawDest && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(rawDest)) {
+      return res.status(400).json({ error: 'Ingresa un correo electrónico destinatario válido.' });
+    }
+    const recipient = rawDest || pedido.cliente_email;
     const productos = db.prepare('SELECT * FROM productos').all();
     const pdfBuffer = await buildOrderDocumentsPdfBuffer(pedido, productos);
 
@@ -1350,38 +1364,39 @@ app.post('/api/pedidos/:id/enviar-documentos', requireAuth, async (req, res) => 
         mailtoSubject: `MotoConnect · Papeles Oficiales Orden ${pedido.codigo_orden}`,
         mailtoBody: `Estimado/a ${pedido.cliente_nombre},\n\nAdjunto encontrarás tu expediente oficial de compra y papeles vehiculares (Factura, DUA/Póliza de Importación, RUAT, SOAT y Garantía) para la orden ${pedido.codigo_orden}.\n\nSoporte WhatsApp: ${WHATSAPP_DISPLAY}`,
         message:
-          'Expediente PDF generado correctamente. El servidor no tiene credenciales SMTP configuradas en .env para envío automático; descarga el PDF directo o envíalo mediante tu cliente de correo.',
+          `Expediente PDF generado. Para que el servidor lo envíe automáticamente hacia ${recipient}, configura SMTP_USER y SMTP_PASS (contraseña de aplicación de Gmail) en Render o .env; mientras tanto puedes descargarlo o abrir tu correo.`,
       });
     }
 
-    const port = Number(process.env.SMTP_PORT || 465);
-    const secure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : port === 465;
+    const smtp = getSmtpConfig();
     const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port,
-      secure,
+      host: smtp.host,
+      port: smtp.port,
+      secure: smtp.secure,
       auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        user: smtp.user,
+        pass: smtp.pass,
       },
     });
 
     await transporter.sendMail({
-      from: process.env.SMTP_FROM || process.env.SMTP_USER,
+      from: smtp.from,
+      replyTo: smtp.user,
       to: recipient,
       subject: `MotoConnect · Papeles Oficiales y Carpeta de Compra (${pedido.codigo_orden})`,
-      text: `Hola ${pedido.cliente_nombre},\n\nAdjuntamos en PDF la documentación oficial de tu compra ${pedido.codigo_orden} (Factura Comercial, DUA/Póliza de Importación, carpeta RUAT, SOAT, PDI 40 puntos y Garantía de 24 meses).\n\n¿Dudas? Contáctanos por WhatsApp al ${WHATSAPP_DISPLAY}.\nMotoConnect Bolivia S.R.L.`,
+      text: `Hola ${pedido.cliente_nombre},\n\nAdjuntamos en PDF la documentación oficial de la orden ${pedido.codigo_orden} (Factura Comercial, DUA/Póliza de Importación, carpeta RUAT, SOAT, PDI 40 puntos y Garantía de 24 meses).\n\n¿Dudas? Contáctanos por WhatsApp al ${WHATSAPP_DISPLAY}.\nMotoConnect Bolivia S.R.L.`,
       attachments,
     });
 
-    logAudit(id, req.user, 'DOCUMENTOS_ENVIADOS_CORREO', `PDF enviado a ${recipient}`);
+    logAudit(id, req.user, 'DOCUMENTOS_ENVIADOS_CORREO', `PDF enviado desde ${smtp.user} a ${recipient}`);
     res.json({
       ok: true,
       sent: true,
       smtpConfigured: true,
+      sender: smtp.user,
       recipient,
       pdfUrl: `/api/pedidos/${id}/documentos-pdf`,
-      message: `Documentación oficial en PDF enviada correctamente a ${recipient}.`,
+      message: `Documentación oficial en PDF enviada desde ${smtp.user} a ${recipient}.`,
     });
   } catch (err) {
     console.error('[POST /api/pedidos/:id/enviar-documentos]', err);

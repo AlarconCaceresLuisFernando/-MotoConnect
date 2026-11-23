@@ -110,19 +110,22 @@ function finishOrder(root, order, message) {
           ${statusBadge(order.estado_pago || 'EN_REVISION')}
           ${statusBadge(order.estado_logistico || 'ESPERANDO_PAGO')}
         </div>
-        <div style="background:var(--bg-elevated);border:1px solid var(--border-color);border-radius:12px;padding:16px;margin:0 auto 24px;max-width:520px;text-align:left">
+        <div style="background:var(--bg-elevated);border:1px solid var(--border-color);border-radius:12px;padding:16px;margin:0 auto 24px;max-width:540px;text-align:left">
           <div style="font-weight:700;font-size:0.92rem;margin-bottom:6px;display:flex;align-items:center;gap:8px">
             ${icon('file', 16)} <span>Papeles oficiales y carpeta de compra (PDF)</span>
           </div>
           <p class="text-muted" style="font-size:0.82rem;margin-bottom:12px;line-height:1.5">
-            Descarga ahora tu expediente PDF con ficha técnica, Factura, DUA/Póliza de Importación, carpeta RUAT, SOAT y Garantía, o envíalo a <strong>${esc(order.cliente_email || state.user?.email || '')}</strong>.
+            Descarga ahora tu expediente PDF con ficha técnica, Factura, DUA/Póliza de Importación, carpeta RUAT, SOAT y Garantía, o escribe el correo de destino para enviarlo:
           </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+            <input type="email" id="confirm-email-target" value="${esc(order.cliente_email || state.user?.email || '')}" placeholder="Correo destino (ej. cliente@gmail.com)" aria-label="Correo destino para enviar PDF" style="flex:1;min-width:210px;padding:8px 12px;font-size:0.85rem" />
+          </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button type="button" class="btn btn-outline btn-sm" id="confirm-download-pdf">
               ${icon('download', 14)} <span>Descargar Papeles PDF</span>
             </button>
             <button type="button" class="btn btn-secondary btn-sm" id="confirm-email-pdf">
-              ${icon('mail', 14)} <span>Enviar PDF a mi correo</span>
+              ${icon('mail', 14)} <span>Enviar PDF por correo</span>
             </button>
           </div>
           <div id="confirm-email-status" style="margin-top:10px;font-size:0.8rem"></div>
@@ -157,11 +160,21 @@ function finishOrder(root, order, message) {
   root.querySelector('#confirm-email-pdf')?.addEventListener('click', async event => {
     const btn = event.currentTarget;
     const statusBox = root.querySelector('#confirm-email-status');
+    const targetInput = root.querySelector('#confirm-email-target');
+    const targetEmail = targetInput?.value.trim() || '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+      toast('Ingresa un correo destino válido para enviar el PDF.', 'warning');
+      targetInput?.focus();
+      return;
+    }
     const orig = btn.innerHTML;
     btn.disabled = true;
     btn.textContent = 'Procesando envío...';
     try {
-      const res = await api(`/pedidos/${orderId}/enviar-documentos`, { method: 'POST', body: {} });
+      const res = await api(`/pedidos/${orderId}/enviar-documentos`, {
+        method: 'POST',
+        body: { email: targetEmail },
+      });
       if (res.sent) {
         toast(res.message, 'success');
         if (statusBox) {

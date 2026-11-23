@@ -158,10 +158,13 @@ function orderMarkup(order) {
           ${icon('download', 14)}
           <span>Descargar Papeles Oficiales (PDF)</span>
         </button>
-        <button type="button" class="btn btn-secondary btn-sm" data-email-pdf="${order.id}">
-          ${icon('mail', 14)}
-          <span>Enviar PDF a mi correo</span>
-        </button>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <input type="email" data-email-input="${order.id}" value="${esc(order.cliente_email || '')}" placeholder="Correo destino..." aria-label="Correo destinatario para orden ${esc(order.codigo_orden || '')}" style="padding:6px 10px;font-size:0.82rem;min-width:210px" />
+          <button type="button" class="btn btn-secondary btn-sm" data-email-pdf="${order.id}">
+            ${icon('mail', 14)}
+            <span>Enviar PDF por correo</span>
+          </button>
+        </div>
         ${order.comprobante_url ? `
           <button type="button" class="btn btn-outline btn-sm" data-receipt="${order.id}">
             ${icon('file', 14)}
@@ -416,11 +419,21 @@ export async function orders(root) {
         button.addEventListener('click', async () => {
           const id = button.dataset.emailPdf;
           const feedback = list.querySelector(`[data-email-feedback="${id}"]`);
+          const targetInput = list.querySelector(`[data-email-input="${id}"]`);
+          const targetEmail = targetInput?.value.trim() || '';
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail)) {
+            toast('Ingresa un correo destinatario válido.', 'warning');
+            targetInput?.focus();
+            return;
+          }
           const orig = button.innerHTML;
           button.disabled = true;
           button.textContent = 'Enviando...';
           try {
-            const res = await api(`/pedidos/${id}/enviar-documentos`, { method: 'POST', body: {} });
+            const res = await api(`/pedidos/${id}/enviar-documentos`, {
+              method: 'POST',
+              body: { email: targetEmail },
+            });
             if (res.sent) {
               toast(res.message, 'success');
               if (feedback) {
