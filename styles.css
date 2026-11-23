@@ -2642,12 +2642,11 @@ h1, h2, h3, h4, h5 {
   color: var(--warning);
 }
 
-/* ---- PAYPAL CONTAINER ---- */
-#paypal-button-container {
-  min-height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+/* ---- PAYPAL & CARD CONTAINERS ---- */
+#paypal-button-container,
+#card-button-container {
+  width: 100%;
+  min-height: 48px;
 }
 
 /* ---- FILE INPUT ---- */

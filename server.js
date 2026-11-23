@@ -421,12 +421,16 @@ function getRealPayPalClientId() {
   return id;
 }
 
+function getRealPayPalSecret() {
+  return (process.env.PAYPAL_CLIENT_SECRET || '').trim();
+}
+
 function isPayPalServerConfigured() {
-  return Boolean(getRealPayPalClientId() && process.env.PAYPAL_CLIENT_SECRET);
+  return Boolean(getRealPayPalClientId() && getRealPayPalSecret());
 }
 
 function getPayPalMode() {
-  return process.env.PAYPAL_MODE === 'live' ? 'live' : 'sandbox';
+  return String(process.env.PAYPAL_MODE || '').trim().toLowerCase() === 'live' ? 'live' : 'sandbox';
 }
 
 function getPayPalBaseUrl() {
@@ -437,7 +441,7 @@ function getPayPalBaseUrl() {
 
 async function getPayPalAccessToken() {
   const clientId = getRealPayPalClientId();
-  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  const clientSecret = getRealPayPalSecret();
   const auth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
   const response = await fetch(`${getPayPalBaseUrl()}/v1/oauth2/token`, {
@@ -909,7 +913,7 @@ app.get('/api/payments/config', (req, res) => {
   res.json({
     paypal: {
       serverConfigured: isPayPalServerConfigured(),
-      hasSecret: Boolean(process.env.PAYPAL_CLIENT_SECRET),
+      hasSecret: Boolean(getRealPayPalSecret()),
       hasClientId: Boolean(realClientId),
       clientId: realClientId,
       mode: getPayPalMode(),
@@ -929,9 +933,9 @@ app.get('/api/payments/config', (req, res) => {
 app.post('/api/payments/paypal/create-order', requireAuth, async (req, res) => {
   try {
     if (!isPayPalServerConfigured()) {
-      const missingMsg = process.env.PAYPAL_CLIENT_SECRET && !getRealPayPalClientId()
-        ? 'La clave secreta de PayPal ya está configurada en el servidor (.env), pero falta agregar PAYPAL_CLIENT_ID válido para habilitar PayPal y pago con tarjeta.'
-        : 'PayPal REST API no está configurado en el servidor (faltan PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET en .env).';
+      const missingMsg = getRealPayPalSecret() && !getRealPayPalClientId()
+        ? 'La clave secreta de PayPal ya está configurada en el servidor, pero falta agregar PAYPAL_CLIENT_ID válido para habilitar PayPal y pago con tarjeta.'
+        : 'PayPal REST API no está configurado en el servidor (faltan PAYPAL_CLIENT_ID y PAYPAL_CLIENT_SECRET en las variables de entorno).';
       return res.status(503).json({
         code: 'PAYPAL_NOT_CONFIGURED',
         error: missingMsg,
@@ -959,6 +963,12 @@ app.post('/api/payments/paypal/create-order', requireAuth, async (req, res) => {
       },
       body: JSON.stringify({
         intent: 'CAPTURE',
+        application_context: {
+          brand_name: 'MotoConnect',
+          locale: 'es-BO',
+          shipping_preference: 'NO_SHIPPING',
+          user_action: 'PAY_NOW',
+        },
         purchase_units: [
           {
             reference_id: refCode,
@@ -974,7 +984,8 @@ app.post('/api/payments/paypal/create-order', requireAuth, async (req, res) => {
 
     const ppOrder = await response.json();
     if (!response.ok || !ppOrder.id) {
-      throw new Error(ppOrder.message || `PayPal error ${response.status}`);
+      const detail = ppOrder.details?.[0]?.description || ppOrder.message || `PayPal error ${response.status}`;
+      throw new Error(detail);
     }
 
     db.prepare(

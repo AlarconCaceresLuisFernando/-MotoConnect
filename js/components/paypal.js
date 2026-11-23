@@ -51,14 +51,14 @@ function unconfiguredNotice(paypalConfig, isCard, onSwitchToQr) {
     : 'Pasarela PayPal en línea';
 
   const detail = paypalConfig?.hasSecret && !paypalConfig?.hasClientId
-    ? `La clave secreta de PayPal en modo <strong>${esc(modeLabel)}</strong> ya está registrada en el servidor. Solo falta agregar <code class="mono">PAYPAL_CLIENT_ID</code> en <code class="mono">.env</code> para habilitar el cobro real con ${isCard ? 'tarjeta de débito/crédito' : 'PayPal'}.`
-    : `Configura <code class="mono">PAYPAL_CLIENT_ID</code>, <code class="mono">PAYPAL_CLIENT_SECRET</code> y <code class="mono">PAYPAL_MODE</code> en <code class="mono">.env</code> para activar los cobros verificados con ${isCard ? 'tarjeta' : 'PayPal'}.`;
+    ? `La clave secreta de PayPal en modo <strong>${esc(modeLabel)}</strong> ya está registrada en el servidor. Solo falta agregar <code class="mono">PAYPAL_CLIENT_ID</code> en las variables de entorno del servidor (<code class="mono">.env</code> en local o <strong>Environment</strong> en Render) para habilitar el cobro real con ${isCard ? 'tarjeta de débito/crédito' : 'PayPal'}.`
+    : `Faltan las variables <code class="mono">PAYPAL_CLIENT_ID</code>, <code class="mono">PAYPAL_CLIENT_SECRET</code> y <code class="mono">PAYPAL_MODE</code> en el servidor (<code class="mono">.env</code> en local o pestaña <strong>Environment</strong> en Render) para activar los cobros verificados con ${isCard ? 'tarjeta' : 'PayPal'}.`;
 
   const html = `
     <div class="alert alert-warning" style="width:100%;flex-direction:column;gap:10px;align-items:flex-start">
       <div style="display:flex;align-items:center;gap:8px;font-weight:700">
         ${icon('lock', 18)}
-        <span>${title} · Falta ID de cliente</span>
+        <span>${title} · Falta configurar variables en el servidor</span>
       </div>
       <p style="margin:0;color:var(--text-secondary);font-size:0.84rem;line-height:1.6">${detail}</p>
       ${typeof onSwitchToQr === 'function' ? `
@@ -144,16 +144,21 @@ async function renderPayPalButtons({
     },
 
     async createOrder() {
-      const buyer = getBuyer();
-      const created = await api('/payments/paypal/create-order', {
-        method: 'POST',
-        body: {
-          buyer,
-          items: state.cart,
-          refCode: reference,
-        },
-      });
-      return created.orderID;
+      try {
+        const buyer = getBuyer();
+        const created = await api('/payments/paypal/create-order', {
+          method: 'POST',
+          body: {
+            buyer,
+            items: state.cart,
+            refCode: reference,
+          },
+        });
+        return created.orderID;
+      } catch (error) {
+        toast(error.message || 'No se pudo iniciar la orden con PayPal', 'danger');
+        throw error;
+      }
     },
 
     async onApprove(data) {
@@ -178,8 +183,12 @@ async function renderPayPalButtons({
       }
     },
 
+    onCancel() {
+      toast('Operación cancelada. Puedes volver a intentar o usar Pago con QR.', 'info');
+    },
+
     onError(error) {
-      toast(`Error en pasarela de pago: ${error?.message || 'operación cancelada'}`, 'danger');
+      toast(`Error en pasarela de pago: ${error?.message || 'operación interrumpida'}`, 'danger');
     },
   };
 
