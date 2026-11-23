@@ -1302,9 +1302,15 @@ export async function panel(root) {
                       </div>
                     </td>
                     <td>
-                      <button type="button" class="btn btn-secondary btn-sm" data-admin-edit="${p.id}">
-                        ${icon('edit', 13)} <span>Editar</span>
-                      </button>
+                      <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        <button type="button" class="btn btn-secondary btn-sm" data-admin-edit="${p.id}">
+                          ${icon('edit', 13)} <span>Editar</span>
+                        </button>
+                        ${['ALMACEN_EMPAQUE', 'ADMIN'].includes(user.rol) ? `
+                          <button type="button" class="btn btn-danger btn-sm" data-admin-delete="${p.id}" data-name="${esc(p.nombre)}">
+                            ${icon('trash', 13)} <span>Eliminar</span>
+                          </button>` : ''}
+                      </div>
                     </td>
                   </tr>`;
               }).join('')}
@@ -1335,6 +1341,35 @@ export async function panel(root) {
         editingProductId = Number(btn.dataset.adminEdit);
         renderCatalogoAdmin();
         window.scrollTo({ top: 0, behavior: 'smooth' });
+      });
+    });
+
+    content.querySelectorAll('[data-admin-delete]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id = Number(btn.dataset.adminDelete);
+        const nombre = btn.dataset.name || 'este modelo';
+        const confirmed = await openDecisionModal({
+          title: `Eliminar · ${nombre}`,
+          bodyHtml: `<p>¿Seguro que deseas eliminar <strong>${esc(nombre)}</strong> del catálogo? Esta acción lo quitará de la tienda. Si el modelo ya tiene pedidos registrados, el sistema lo protegerá automáticamente y podrás dejar su stock en 0.</p>`,
+          confirmLabel: 'Sí, eliminar del catálogo',
+          confirmClass: 'btn-danger',
+        });
+        if (!confirmed) return;
+
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.textContent = '...';
+        try {
+          await api(`/productos/${id}`, { method: 'DELETE' });
+          if (editingProductId === id) editingProductId = null;
+          toast(`Producto eliminado: ${nombre}`, 'success');
+          await reload();
+          render();
+        } catch (err) {
+          toast(err.message, 'danger');
+          btn.disabled = false;
+          btn.innerHTML = orig;
+        }
       });
     });
 

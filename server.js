@@ -837,7 +837,7 @@ app.put(
   }
 );
 
-app.delete('/api/productos/:id', requireAuth, requireRoles('ADMIN'), (req, res) => {
+app.delete('/api/productos/:id', requireAuth, requireRoles('ALMACEN_EMPAQUE', 'ADMIN'), (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const existing = db.prepare('SELECT * FROM productos WHERE id = ?').get(id);
